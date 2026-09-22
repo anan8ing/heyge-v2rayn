@@ -30,6 +30,7 @@ public partial class MainWindow
         menuCheckUpdate.Click += MenuCheckUpdate_Click;
         btnNewUpdate.Click += MenuCheckUpdate_Click;
         menuBackupAndRestore.Click += MenuBackupAndRestore_Click;
+        ContentRendered += MainWindow_ContentRendered;
 
         pbTheme.Content ??= new ThemeSettingView();
 
@@ -168,6 +169,25 @@ public partial class MainWindow
         });
     }
 
+    private async void MainWindow_ContentRendered(object? sender, EventArgs e)
+    {
+        // First launch gets one clear account invitation. Once a managed
+        // subscription exists, the saved scoped token represents a signed-in
+        // session and the prompt is not shown again.
+        if (await HeyGeLoginWindow.HasManagedSubscriptionAsync())
+        {
+            txtHeyGeLogin.Text = "HeyGe 已登录 · 同步";
+            return;
+        }
+
+        if (_config.GuiItem.HeyGeLoginPromptDisabled)
+        {
+            return;
+        }
+
+        await Dispatcher.InvokeAsync(() => ShowHeyGeLogin());
+    }
+
     private async Task DelegateSnackMsg(string content)
     {
         MainSnackbar.MessageQueue?.Enqueue(content);
@@ -251,12 +271,25 @@ public partial class MainWindow
 
     private void MenuHeyGeLogin_Click(object sender, RoutedEventArgs e)
     {
+        ShowHeyGeLogin();
+    }
+
+    private async void ShowHeyGeLogin()
+    {
         var window = new HeyGeLoginWindow { Owner = this };
-        if (window.ShowDialog() == true)
+        var loggedIn = window.ShowDialog() == true;
+        if (window.SuppressStartupPrompt && !_config.GuiItem.HeyGeLoginPromptDisabled)
+        {
+            _config.GuiItem.HeyGeLoginPromptDisabled = true;
+            await ConfigHandler.SaveConfig(_config);
+        }
+
+        if (loggedIn)
         {
             // The login dialog writes exactly one subscription item and updates
             // it immediately.  Reloading refreshes the visible node list.
             ViewModel?.Reload();
+            txtHeyGeLogin.Text = "HeyGe 已登录 · 同步";
         }
     }
 

@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace v2rayN.Views;
@@ -13,6 +14,14 @@ public partial class HeyGeLoginWindow : Window
 {
     private const string ManagedSubscriptionMemo = "HEYGE_V2RAYN_MANAGED";
 
+    public bool SuppressStartupPrompt => chkDontPromptAgain.IsChecked == true;
+
+    public static async Task<bool> HasManagedSubscriptionAsync()
+    {
+        return (await AppManager.Instance.SubItems())
+            .Any(item => item.Memo == ManagedSubscriptionMemo && item.Enabled != false);
+    }
+
     public HeyGeLoginWindow()
     {
         InitializeComponent();
@@ -22,7 +31,7 @@ public partial class HeyGeLoginWindow : Window
 
     private async void BtnLogin_Click(object sender, RoutedEventArgs e)
     {
-        txtStatus.Text = string.Empty;
+        SetStatus("正在验证账号…", "#1565C0");
         btnLogin.IsEnabled = false;
         try
         {
@@ -36,11 +45,25 @@ public partial class HeyGeLoginWindow : Window
             using var response = await client.PostAsJsonAsync(
                 "/api/customer/auth/v2rayn/login",
                 new HeyGeLoginRequest(email, password));
-            var payload = await response.Content.ReadFromJsonAsync<HeyGeLoginResponse>();
+            var responseBody = await response.Content.ReadAsStringAsync();
+            HeyGeLoginResponse? payload = null;
+            try
+            {
+                payload = JsonSerializer.Deserialize<HeyGeLoginResponse>(responseBody);
+            }
+            catch (JsonException)
+            {
+                // Validation responses may contain an array of messages rather
+                // than the normal string message. It is handled below.
+            }
             if (!response.IsSuccessStatusCode || payload is null || string.IsNullOrEmpty(payload.SubscriptionPath))
             {
-                var message = payload?.Message;
-                throw new InvalidOperationException(message.IsNullOrEmpty() ? "登录失败，请检查账号、密码和网站地址" : message);
+                var message = payload?.Message ?? ReadResponseMessage(responseBody);
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    message = "账号或密码错误，请确认后重试";
+                else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                    message ??= "账号或密码格式不正确，请检查后重试";
+                throw new InvalidOperationException(message.IsNullOrEmpty() ? $"登录失败（HTTP {(int)response.StatusCode}），请检查网站地址或稍后重试" : message);
             }
 
             if (!payload.SubscriptionPath.StartsWith("/api/customer/v2rayn/subscription/", StringComparison.Ordinal))
@@ -61,23 +84,61 @@ public partial class HeyGeLoginWindow : Window
                 throw new InvalidOperationException("无法保存订阅，请检查客户端本地存储权限");
 
             // Sync now so the user sees one up-to-date HeyGe group immediately.
+            var syncSucceeded = false;
             await SubscriptionHandler.UpdateProcess(
                 AppManager.Instance.Config,
                 item.Id,
                 false,
-                (_, message) =>
+                (success, message) =>
                 {
-                    Dispatcher.Invoke(() => txtStatus.Text = message);
+                    Dispatcher.Invoke(() => SetStatus(message, success ? "#188038" : "#1565C0"));
+                    syncSucceeded |= success;
                     return Task.CompletedTask;
                 });
+            if (!syncSucceeded)
+                throw new InvalidOperationException("已验证账号，但同步有效节点失败。请检查网络后重试，或联系客户服务。");
+
+            SetStatus("登录成功，已同步有效节点。", "#188038");
             txtPassword.Clear();
             DialogResult = true;
         }
         catch (Exception ex)
         {
-            txtPassword.Clear();
-            txtStatus.Text = ex.Message;
+            // Keep the password in the field so a transient network failure
+            // can be retried without re-entering it; it is never saved.
+            SetStatus(ex.Message, "#B42318");
+        }
+        finally
+        {
             btnLogin.IsEnabled = true;
+        }
+    }
+
+    private void SetStatus(string message, string color)
+    {
+        txtStatus.Text = message;
+        txtStatus.Foreground = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(color)!;
+    }
+
+    private static string? ReadResponseMessage(string responseBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            if (!document.RootElement.TryGetProperty("message", out var message))
+                return null;
+            return message.ValueKind switch
+            {
+                JsonValueKind.String => message.GetString(),
+                JsonValueKind.Array => string.Join("；", message.EnumerateArray()
+                    .Where(item => item.ValueKind == JsonValueKind.String)
+                    .Select(item => item.GetString())),
+                _ => null,
+            };
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

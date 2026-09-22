@@ -1,7 +1,9 @@
 <Project>
 
     <PropertyGroup>
-        <Version>7.25.2</Version>
+        <!-- HeyGe releases use the upstream-compatible version line, but are
+             published only from the HeyGe distribution channel. -->
+        <Version>7.25.3</Version>
     </PropertyGroup>
 
     <PropertyGroup>

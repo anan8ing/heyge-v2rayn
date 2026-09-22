@@ -664,7 +664,10 @@ public class Global
         { ECoreType.overtls, "ShadowsocksR-Live/overtls" },
         { ECoreType.shadowquic, "spongebob888/shadowquic" },
         { ECoreType.mieru, "enfein/mieru" },
-        { ECoreType.v2rayN, "2dust/v2rayN" },
+        // The desktop application itself must never update from upstream: an
+        // upstream archive would overwrite the HeyGe login/sync experience.
+        // Core binaries keep using their respective official release channels.
+        { ECoreType.v2rayN, "anan8ing/heyge-v2rayn" },
     };
 
     public static readonly List<string> OtherGeoUrls =

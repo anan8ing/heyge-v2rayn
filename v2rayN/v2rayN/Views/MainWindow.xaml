@@ -147,7 +147,7 @@
                                             Margin="{StaticResource MarginRight8}"
                                             VerticalAlignment="Center"
                                             Kind="AccountSync" />
-                                        <TextBlock Text="HeyGe 登录并同步" />
+                                        <TextBlock x:Name="txtHeyGeLogin" Text="HeyGe 登录并同步" />
                                     </StackPanel>
                                 </MenuItem.Header>
                             </MenuItem>

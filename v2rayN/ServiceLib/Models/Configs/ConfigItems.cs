@@ -75,6 +75,9 @@ public class GUIItem
     public bool EnableHWA { get; set; } = false;
     public bool EnableLog { get; set; } = true;
     public string? RootCertProvider { get; set; }
+    // A user may dismiss the first-run HeyGe account prompt permanently. The
+    // account password is never persisted; the managed subscription token is.
+    public bool HeyGeLoginPromptDisabled { get; set; }
 }
 
 [Serializable]
